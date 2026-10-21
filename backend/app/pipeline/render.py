@@ -136,18 +136,21 @@ def render(edl: dict[str, Any], assets: dict[int, Any], workdir: Path, output: P
     output.parent.mkdir(parents=True, exist_ok=True)
     cmd = build_command(edl, assets, workdir, output)
     total = duration(edl)
-    proc = subprocess.Popen(cmd, cwd=workdir, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-    assert proc.stdout is not None
-    for line in proc.stdout:
-        if line.startswith("out_time_us=") and on_progress and total:
-            try:
-                on_progress(min(int(line.split("=")[1]) / 1e6 / total, 1.0))
-            except ValueError:
-                pass
-    stderr = proc.stderr.read() if proc.stderr else ""
-    if proc.wait() != 0:
-        (workdir / "ffmpeg.log").write_text(stderr)
-        raise RenderError(stderr.strip().splitlines()[-1] if stderr.strip() else "FFmpeg fallito")
+    # stderr va su file: una pipe non letta si riempie (es. avvisi libass ripetuti a ogni frame) e blocca FFmpeg
+    log_path = workdir / "ffmpeg.log"
+    with log_path.open("w") as log:
+        proc = subprocess.Popen(cmd, cwd=workdir, stdout=subprocess.PIPE, stderr=log, text=True)
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            if line.startswith("out_time_us=") and on_progress and total:
+                try:
+                    on_progress(min(int(line.split("=")[1]) / 1e6 / total, 1.0))
+                except ValueError:
+                    pass
+        code = proc.wait()
+    if code != 0:
+        stderr = log_path.read_text(errors="replace").strip()
+        raise RenderError(stderr.splitlines()[-1] if stderr else "FFmpeg fallito")
     return output
 
 
