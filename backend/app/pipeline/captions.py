@@ -70,8 +70,12 @@ def build_ass(edl: dict[str, Any], words: list[dict[str, Any]], total: float) ->
         x, y = W // 2, int(H * cap["position_y"])
         emphasis = {e.lower().strip(".,!?") for e in cap.get("emphasis", [])}
         hl = ass_color(cap["highlight"])
-        for chunk in chunk_words(words, cap["max_words"]):
+        chunks = list(chunk_words(words, cap["max_words"]))
+        for n, chunk in enumerate(chunks):
             chunk_end = min(chunk[-1]["end"] + 0.15, total)
+            # la frase resta un attimo dopo l'ultima parola, ma mai sopra quella successiva
+            if n + 1 < len(chunks):
+                chunk_end = min(chunk_end, max(chunks[n + 1][0]["start"], chunk[-1]["end"]))
             for i, current in enumerate(chunk):
                 start = current["start"] if i else chunk[0]["start"]
                 end = chunk[i + 1]["start"] if i + 1 < len(chunk) else chunk_end
